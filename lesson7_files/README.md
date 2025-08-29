@@ -6,6 +6,8 @@ A comprehensive, configurable analysis framework for e-commerce business perform
 
 ```
 ├── EDA_Refactored.ipynb          # Main analysis notebook
+├── dashboard.py                  # Streamlit dashboard application
+├── dashboard_utils.py            # Dashboard helper functions
 ├── data_loader.py                # Data loading and preprocessing
 ├── business_metrics.py           # Business metrics calculations
 ├── requirements.txt              # Python dependencies
@@ -38,6 +40,13 @@ A comprehensive, configurable analysis framework for e-commerce business perform
 - Customer satisfaction distribution charts
 - Professional styling with business-oriented color schemes
 
+### Interactive Dashboard
+- **Professional Streamlit Dashboard:** Real-time interactive analysis
+- **KPI Cards:** Key metrics with trend indicators and color coding
+- **Dynamic Filtering:** Year-based filtering that updates all charts
+- **Responsive Layout:** Professional 2x2 grid layout with uniform card heights
+- **Business-Ready Styling:** Clean, professional appearance without icons
+
 ## Quick Start
 
 ### 1. Install Dependencies
@@ -61,6 +70,12 @@ DATA_PATH = 'ecommerce_data' # Path to data files
 
 ### 3. Run the Analysis
 
+**Option A: Interactive Dashboard**
+```bash
+streamlit run dashboard.py
+```
+
+**Option B: Jupyter Notebook**
 Execute all cells in the notebook or run specific sections:
 - Revenue Performance Analysis
 - Product Category Analysis  
@@ -105,31 +120,69 @@ visualizer = MetricsVisualizer()
 visualizer.plot_monthly_revenue_trend(monthly_data, 2023)
 ```
 
+### dashboard.py & dashboard_utils.py
+
+Main Streamlit application and supporting utilities:
+
+```python
+# Run the dashboard
+streamlit run dashboard.py
+
+# Key features:
+# - Automatic data loading and caching
+# - Year-based filtering with dropdown
+# - Professional KPI cards with trend indicators
+# - Interactive Plotly charts
+# - Responsive grid layout
+```
+
+## Dashboard Features
+
+### Layout Structure
+- **Header:** Title with year filter dropdown (applies globally to all charts)
+- **KPI Row:** 4 cards showing Total Revenue, Monthly Growth, AOV, and Total Orders
+  - Green/red trend indicators with arrows and percentages
+  - Professional card styling with uniform heights
+- **Charts Grid:** 2x2 responsive layout with:
+  - **Revenue Trend:** Line chart with solid current year, dashed previous year
+  - **Top Categories:** Horizontal bar chart with blue gradient, top 10 categories
+  - **Geographic Map:** US choropleth with blue color scheme
+  - **Satisfaction Chart:** Bar chart showing review scores by delivery time buckets
+- **Bottom Row:** 2 cards for Average Delivery Time and Review Score with stars
+
+### Professional Styling
+- Clean, business-ready appearance without icons
+- Consistent blue color scheme throughout
+- Proper formatting: $300K instead of $300,000
+- Grid lines on charts for easier reading
+- Hover tooltips with detailed information
+- Responsive design that works on different screen sizes
+
 ## Key Analysis Sections
 
 ### 1. Revenue Performance Analysis
-- Year-over-year revenue comparison
-- Monthly growth trends and seasonality
-- Average order value analysis
-- Order volume trends
+- Year-over-year revenue comparison with trend indicators
+- Monthly growth trends and seasonality patterns
+- Average order value analysis with growth tracking
+- Order volume trends with comparison metrics
 
 ### 2. Product Category Analysis
-- Revenue by product category
+- Revenue by product category (top 10 displayed)
 - Market concentration analysis
-- Category performance rankings
-- Revenue share distribution
+- Category performance rankings with visual emphasis
+- Revenue share distribution with proper formatting
 
 ### 3. Geographic Performance Analysis
-- State-level revenue distribution
+- State-level revenue distribution via interactive map
 - Geographic concentration metrics
-- Choropleth map visualizations
-- Market penetration analysis
+- Choropleth map visualizations with hover details
+- Market penetration analysis across US states
 
 ### 4. Customer Experience Analysis
-- Delivery time performance
-- Customer satisfaction scores
-- Review score distribution
-- Correlation between delivery speed and satisfaction
+- Delivery time performance with speed categories
+- Customer satisfaction scores with star ratings
+- Review score distribution analysis
+- Correlation between delivery speed and satisfaction ratings
 
 ## Customization Examples
 

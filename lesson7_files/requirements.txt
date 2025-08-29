@@ -8,12 +8,13 @@ matplotlib>=3.5.0
 seaborn>=0.11.0
 plotly>=5.0.0
 
+# Streamlit dashboard dependencies
+streamlit>=1.28.0
+streamlit-plotly-events>=0.0.6  # For enhanced plotly integration
+
 # Jupyter notebook support
 jupyter>=1.0.0
 ipykernel>=6.0.0
-
-# Web app framework (if building dashboard)
-streamlit>=1.28.0
 
 # Optional: Enhanced data processing
 openpyxl>=3.0.0  # For Excel file support
