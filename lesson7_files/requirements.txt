@@ -1,8 +1,24 @@
+# E-commerce Analysis Requirements
+# Core data analysis libraries
 pandas>=1.5.0
 numpy>=1.21.0
+
+# Visualization libraries
 matplotlib>=3.5.0
 seaborn>=0.11.0
 plotly>=5.0.0
-streamlit>=1.28.0
+
+# Jupyter notebook support
 jupyter>=1.0.0
 ipykernel>=6.0.0
+
+# Web app framework (if building dashboard)
+streamlit>=1.28.0
+
+# Optional: Enhanced data processing
+openpyxl>=3.0.0  # For Excel file support
+xlrd>=2.0.0      # For reading older Excel files
+
+# Development and code quality (optional)
+black>=22.0.0    # Code formatting
+flake8>=4.0.0    # Code linting

@@ -1,471 +1,443 @@
 """
-Business metrics calculation module for e-commerce data analysis.
+Business Metrics Calculation Module for E-commerce Analysis
+
+This module contains functions to calculate key business metrics including revenue,
+growth rates, customer metrics, product performance, and geographic analysis.
 """
 
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple, Optional
 import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
-
-# Optional seaborn import
-try:
-    import seaborn as sns
-    HAS_SEABORN = True
-except ImportError:
-    HAS_SEABORN = False
+import seaborn as sns
 
 
 class BusinessMetricsCalculator:
     """
-    A class for calculating various business metrics from e-commerce data.
+    A class to calculate various business metrics for e-commerce analysis.
     """
     
     def __init__(self, sales_data: pd.DataFrame):
         """
-        Initialize the metrics calculator.
+        Initialize with sales data.
         
         Args:
             sales_data (pd.DataFrame): Processed sales dataset
         """
         self.sales_data = sales_data.copy()
-        self._validate_data()
-    
-    def _validate_data(self):
-        """Validate that required columns exist in the data."""
-        required_cols = ['price', 'order_id', 'purchase_year']
-        missing_cols = [col for col in required_cols if col not in self.sales_data.columns]
-        if missing_cols:
-            raise ValueError(f"Missing required columns: {missing_cols}")
     
     def calculate_revenue_metrics(self, current_year: int, 
-                                previous_year: Optional[int] = None) -> Dict[str, float]:
+                                 comparison_year: Optional[int] = None) -> Dict:
         """
-        Calculate revenue-related metrics.
+        Calculate revenue metrics for specified years.
         
         Args:
             current_year (int): Year to analyze
-            previous_year (int, optional): Comparison year
-        
+            comparison_year (int, optional): Year to compare against
+            
         Returns:
-            Dict[str, float]: Revenue metrics
+            Dict: Revenue metrics including totals and growth rates
         """
-        current_data = self.sales_data[self.sales_data['purchase_year'] == current_year]
+        current_data = self.sales_data[self.sales_data['year'] == current_year]
+        current_revenue = current_data['price'].sum()
         
         metrics = {
-            'total_revenue': current_data['price'].sum(),
-            'total_orders': current_data['order_id'].nunique(),
-            'average_order_value': current_data.groupby('order_id')['price'].sum().mean(),
-            'total_items_sold': len(current_data)
+            'current_year': current_year,
+            'current_revenue': current_revenue,
+            'current_orders': current_data['order_id'].nunique(),
+            'current_avg_order_value': current_data.groupby('order_id')['price'].sum().mean()
         }
         
-        if previous_year:
-            previous_data = self.sales_data[self.sales_data['purchase_year'] == previous_year]
-            prev_revenue = previous_data['price'].sum()
-            prev_orders = previous_data['order_id'].nunique()
-            prev_aov = previous_data.groupby('order_id')['price'].sum().mean()
+        if comparison_year:
+            comparison_data = self.sales_data[self.sales_data['year'] == comparison_year]
+            comparison_revenue = comparison_data['price'].sum()
+            comparison_orders = comparison_data['order_id'].nunique()
+            comparison_aov = comparison_data.groupby('order_id')['price'].sum().mean()
+            
+            # Calculate growth rates
+            revenue_growth = ((current_revenue - comparison_revenue) / comparison_revenue) * 100
+            orders_growth = ((metrics['current_orders'] - comparison_orders) / comparison_orders) * 100
+            aov_growth = ((metrics['current_avg_order_value'] - comparison_aov) / comparison_aov) * 100
             
             metrics.update({
-                'revenue_growth_rate': ((metrics['total_revenue'] - prev_revenue) / prev_revenue * 100) if prev_revenue > 0 else 0,
-                'order_growth_rate': ((metrics['total_orders'] - prev_orders) / prev_orders * 100) if prev_orders > 0 else 0,
-                'aov_growth_rate': ((metrics['average_order_value'] - prev_aov) / prev_aov * 100) if prev_aov > 0 else 0,
-                'previous_year_revenue': prev_revenue,
-                'previous_year_orders': prev_orders,
-                'previous_year_aov': prev_aov
+                'comparison_year': comparison_year,
+                'comparison_revenue': comparison_revenue,
+                'comparison_orders': comparison_orders,
+                'comparison_avg_order_value': comparison_aov,
+                'revenue_growth_pct': revenue_growth,
+                'orders_growth_pct': orders_growth,
+                'aov_growth_pct': aov_growth
             })
         
         return metrics
     
-    def calculate_monthly_trends(self, year: int) -> pd.DataFrame:
+    def calculate_monthly_growth_trend(self, year: int) -> pd.Series:
         """
-        Calculate month-over-month trends for a given year.
+        Calculate month-over-month growth rates for a specific year.
         
         Args:
             year (int): Year to analyze
-        
+            
         Returns:
-            pd.DataFrame: Monthly trends data
+            pd.Series: Monthly growth rates
         """
-        year_data = self.sales_data[self.sales_data['purchase_year'] == year]
+        year_data = self.sales_data[self.sales_data['year'] == year]
+        monthly_revenue = year_data.groupby('month')['price'].sum()
+        monthly_growth = monthly_revenue.pct_change() * 100
         
-        monthly_metrics = year_data.groupby('purchase_month').agg({
-            'price': 'sum',
-            'order_id': 'nunique'
-        }).reset_index()
-        
-        monthly_metrics.columns = ['month', 'revenue', 'orders']
-        monthly_metrics['avg_order_value'] = year_data.groupby('purchase_month').apply(
-            lambda x: x.groupby('order_id')['price'].sum().mean()
-        ).values
-        
-        # Calculate growth rates
-        monthly_metrics['revenue_growth'] = monthly_metrics['revenue'].pct_change() * 100
-        monthly_metrics['order_growth'] = monthly_metrics['orders'].pct_change() * 100
-        monthly_metrics['aov_growth'] = monthly_metrics['avg_order_value'].pct_change() * 100
-        
-        return monthly_metrics
+        return monthly_growth
     
-    def analyze_product_performance(self, year: int, top_n: int = 10) -> Dict[str, pd.DataFrame]:
+    def get_product_category_performance(self, products_df: pd.DataFrame, 
+                                       year: Optional[int] = None) -> pd.DataFrame:
         """
-        Analyze product category performance.
+        Calculate product category performance metrics.
         
         Args:
-            year (int): Year to analyze
-            top_n (int): Number of top categories to return
-        
+            products_df (pd.DataFrame): Products dataset
+            year (int, optional): Specific year to analyze
+            
         Returns:
-            Dict[str, pd.DataFrame]: Product performance metrics
+            pd.DataFrame: Category performance metrics
         """
-        year_data = self.sales_data[self.sales_data['purchase_year'] == year]
+        analysis_data = self.sales_data.copy()
         
-        if 'product_category_name' not in year_data.columns:
-            return {'error': 'Product category data not available'}
+        if year:
+            analysis_data = analysis_data[analysis_data['year'] == year]
         
-        category_metrics = year_data.groupby('product_category_name').agg({
+        # Merge with products to get categories
+        category_data = pd.merge(
+            left=products_df[['product_id', 'product_category_name']],
+            right=analysis_data[['product_id', 'price', 'order_id']],
+            on='product_id',
+            how='inner'
+        )
+        
+        # Calculate category metrics
+        category_metrics = category_data.groupby('product_category_name').agg({
             'price': ['sum', 'mean', 'count'],
             'order_id': 'nunique'
         }).round(2)
         
-        category_metrics.columns = ['total_revenue', 'avg_item_price', 'items_sold', 'unique_orders']
-        category_metrics = category_metrics.reset_index()
-        category_metrics['revenue_share'] = (category_metrics['total_revenue'] / 
-                                           category_metrics['total_revenue'].sum() * 100).round(2)
+        # Flatten column names
+        category_metrics.columns = ['total_revenue', 'avg_item_price', 'total_items', 'unique_orders']
+        category_metrics = category_metrics.sort_values('total_revenue', ascending=False)
         
-        top_categories = category_metrics.nlargest(top_n, 'total_revenue')
+        # Calculate percentages
+        total_revenue = category_metrics['total_revenue'].sum()
+        category_metrics['revenue_share_pct'] = (category_metrics['total_revenue'] / total_revenue * 100).round(2)
         
-        return {
-            'all_categories': category_metrics.sort_values('total_revenue', ascending=False),
-            'top_categories': top_categories
-        }
+        return category_metrics.reset_index()
     
-    def analyze_geographic_performance(self, year: int) -> pd.DataFrame:
+    def get_geographic_performance(self, orders_df: pd.DataFrame, 
+                                  customers_df: pd.DataFrame,
+                                  year: Optional[int] = None) -> pd.DataFrame:
         """
-        Analyze sales performance by geographic region.
+        Calculate geographic performance metrics by state.
         
         Args:
-            year (int): Year to analyze
-        
+            orders_df (pd.DataFrame): Orders dataset
+            customers_df (pd.DataFrame): Customers dataset
+            year (int, optional): Specific year to analyze
+            
         Returns:
             pd.DataFrame: Geographic performance metrics
         """
-        year_data = self.sales_data[self.sales_data['purchase_year'] == year]
+        analysis_data = self.sales_data.copy()
         
-        if 'customer_state' not in year_data.columns:
-            return pd.DataFrame({'error': ['Geographic data not available']})
+        if year:
+            analysis_data = analysis_data[analysis_data['year'] == year]
         
-        state_metrics = year_data.groupby('customer_state').agg({
-            'price': 'sum',
-            'order_id': 'nunique'
-        }).reset_index()
+        # Get customer state information
+        sales_with_customers = pd.merge(
+            left=analysis_data[['order_id', 'price']],
+            right=orders_df[['order_id', 'customer_id']],
+            on='order_id',
+            how='inner'
+        )
         
-        state_metrics.columns = ['state', 'revenue', 'orders']
-        state_metrics['avg_order_value'] = year_data.groupby('customer_state').apply(
-            lambda x: x.groupby('order_id')['price'].sum().mean()
-        ).values
+        geographic_data = pd.merge(
+            left=sales_with_customers,
+            right=customers_df[['customer_id', 'customer_state', 'customer_city']],
+            on='customer_id',
+            how='inner'
+        )
         
-        state_metrics = state_metrics.sort_values('revenue', ascending=False)
-        return state_metrics
+        # Calculate state-level metrics
+        state_metrics = geographic_data.groupby('customer_state').agg({
+            'price': ['sum', 'mean', 'count'],
+            'order_id': 'nunique',
+            'customer_id': 'nunique'
+        }).round(2)
+        
+        # Flatten column names
+        state_metrics.columns = ['total_revenue', 'avg_order_value', 'total_items', 
+                               'unique_orders', 'unique_customers']
+        state_metrics = state_metrics.sort_values('total_revenue', ascending=False)
+        
+        return state_metrics.reset_index()
     
-    def analyze_customer_satisfaction(self, year: int) -> Dict[str, float]:
+    def calculate_customer_experience_metrics(self, reviews_df: pd.DataFrame,
+                                            year: Optional[int] = None) -> Dict:
         """
-        Calculate customer satisfaction metrics.
+        Calculate customer experience metrics including delivery and satisfaction.
         
         Args:
-            year (int): Year to analyze
-        
+            reviews_df (pd.DataFrame): Reviews dataset
+            year (int, optional): Specific year to analyze
+            
         Returns:
-            Dict[str, float]: Customer satisfaction metrics
+            Dict: Customer experience metrics
         """
-        year_data = self.sales_data[self.sales_data['purchase_year'] == year]
+        analysis_data = self.sales_data.copy()
         
-        if 'review_score' not in year_data.columns:
-            return {'error': 'Review data not available'}
+        if year:
+            analysis_data = analysis_data[analysis_data['year'] == year]
         
-        # Remove duplicates for order-level analysis
-        order_data = year_data.drop_duplicates('order_id')
+        # Add delivery metrics if not already present
+        if 'delivery_days' not in analysis_data.columns:
+            from data_loader import add_delivery_metrics
+            analysis_data = add_delivery_metrics(analysis_data)
         
+        # Merge with reviews
+        experience_data = pd.merge(
+            left=analysis_data[['order_id', 'delivery_days', 'delivery_speed_category']],
+            right=reviews_df[['order_id', 'review_score']],
+            on='order_id',
+            how='inner'
+        )
+        
+        # Remove duplicates (one record per order)
+        experience_data = experience_data.drop_duplicates(subset=['order_id'])
+        
+        # Calculate metrics
         metrics = {
-            'avg_review_score': order_data['review_score'].mean(),
-            'total_reviews': order_data['review_score'].count(),
-            'score_5_percentage': (order_data['review_score'] == 5).mean() * 100,
-            'score_4_plus_percentage': (order_data['review_score'] >= 4).mean() * 100,
-            'score_1_2_percentage': (order_data['review_score'] <= 2).mean() * 100
+            'avg_delivery_days': experience_data['delivery_days'].mean(),
+            'median_delivery_days': experience_data['delivery_days'].median(),
+            'avg_review_score': experience_data['review_score'].mean(),
+            'review_score_distribution': experience_data['review_score'].value_counts(normalize=True).to_dict(),
+            'delivery_speed_distribution': experience_data['delivery_speed_category'].value_counts(normalize=True).to_dict()
         }
+        
+        # Calculate average review score by delivery speed
+        delivery_satisfaction = experience_data.groupby('delivery_speed_category')['review_score'].mean().to_dict()
+        metrics['avg_review_by_delivery_speed'] = delivery_satisfaction
         
         return metrics
     
-    def analyze_delivery_performance(self, year: int) -> Dict[str, float]:
+    def get_order_status_distribution(self, orders_df: pd.DataFrame, 
+                                    year: Optional[int] = None) -> pd.Series:
         """
-        Calculate delivery performance metrics.
+        Get order status distribution for specified year.
         
         Args:
-            year (int): Year to analyze
-        
+            orders_df (pd.DataFrame): Orders dataset with status information
+            year (int, optional): Specific year to analyze
+            
         Returns:
-            Dict[str, float]: Delivery performance metrics
+            pd.Series: Order status distribution
         """
-        year_data = self.sales_data[self.sales_data['purchase_year'] == year]
+        analysis_data = orders_df.copy()
         
-        if 'delivery_days' not in year_data.columns:
-            return {'error': 'Delivery data not available'}
+        if year:
+            # Ensure year column exists
+            if 'year' not in analysis_data.columns:
+                analysis_data['year'] = pd.to_datetime(analysis_data['order_purchase_timestamp']).dt.year
+            analysis_data = analysis_data[analysis_data['year'] == year]
         
-        # Remove duplicates for order-level analysis
-        order_data = year_data.drop_duplicates('order_id')
-        order_data = order_data.dropna(subset=['delivery_days'])
-        
-        metrics = {
-            'avg_delivery_days': order_data['delivery_days'].mean(),
-            'median_delivery_days': order_data['delivery_days'].median(),
-            'fast_delivery_percentage': (order_data['delivery_days'] <= 3).mean() * 100,
-            'slow_delivery_percentage': (order_data['delivery_days'] > 7).mean() * 100
-        }
-        
-        return metrics
-    
-    def generate_comprehensive_report(self, current_year: int, 
-                                    previous_year: Optional[int] = None) -> Dict[str, any]:
-        """
-        Generate a comprehensive business metrics report.
-        
-        Args:
-            current_year (int): Year to analyze
-            previous_year (int, optional): Comparison year
-        
-        Returns:
-            Dict[str, any]: Comprehensive metrics report
-        """
-        report = {
-            'analysis_period': current_year,
-            'comparison_period': previous_year,
-            'revenue_metrics': self.calculate_revenue_metrics(current_year, previous_year),
-            'monthly_trends': self.calculate_monthly_trends(current_year),
-            'product_performance': self.analyze_product_performance(current_year),
-            'geographic_performance': self.analyze_geographic_performance(current_year),
-            'customer_satisfaction': self.analyze_customer_satisfaction(current_year),
-            'delivery_performance': self.analyze_delivery_performance(current_year)
-        }
-        
-        return report
+        status_dist = analysis_data['order_status'].value_counts(normalize=True) * 100
+        return status_dist.round(2)
 
 
 class MetricsVisualizer:
     """
-    A class for creating business metrics visualizations.
+    A class to create visualizations for business metrics.
     """
     
-    def __init__(self, report_data: Dict[str, any]):
+    def __init__(self, color_palette: str = 'viridis'):
         """
-        Initialize the visualizer.
+        Initialize with color scheme.
         
         Args:
-            report_data (Dict): Business metrics report data
+            color_palette (str): Color palette for visualizations
         """
-        self.report_data = report_data
-        self.color_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
-                             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+        self.color_palette = color_palette
+        plt.style.use('default')
     
-    def plot_revenue_trend(self, figsize: Tuple[int, int] = (12, 6)) -> plt.Figure:
+    def plot_monthly_revenue_trend(self, monthly_data: pd.DataFrame, 
+                                  year: int, title_suffix: str = "") -> None:
         """
-        Create a revenue trend visualization.
+        Create monthly revenue trend plot.
         
         Args:
-            figsize (Tuple[int, int]): Figure size
-        
-        Returns:
-            plt.Figure: Revenue trend plot
+            monthly_data (pd.DataFrame): Monthly aggregated data
+            year (int): Year being analyzed
+            title_suffix (str): Additional text for title
         """
-        monthly_data = self.report_data['monthly_trends']
-        year = self.report_data['analysis_period']
+        plt.figure(figsize=(12, 6))
+        plt.plot(monthly_data['month'], monthly_data['price'], 
+                marker='o', linewidth=2, markersize=8, color='#1f77b4')
+        plt.title(f'Monthly Revenue Trend - {year} {title_suffix}', fontsize=16, fontweight='bold')
+        plt.xlabel('Month', fontsize=12)
+        plt.ylabel('Revenue ($)', fontsize=12)
+        plt.grid(True, alpha=0.3)
+        plt.xticks(range(1, 13))
         
-        fig, ax = plt.subplots(figsize=figsize)
-        
-        ax.plot(monthly_data['month'], monthly_data['revenue'], 
-                marker='o', linewidth=2, markersize=8, color=self.color_palette[0])
-        
-        ax.set_title(f'Monthly Revenue Trend - {year}', fontsize=16, fontweight='bold', pad=20)
-        ax.set_xlabel('Month', fontsize=12)
-        ax.set_ylabel('Revenue ($)', fontsize=12)
-        ax.grid(True, alpha=0.3)
-        
-        # Format y-axis as currency
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
-        
-        # Add data labels
-        for i, v in enumerate(monthly_data['revenue']):
-            ax.annotate(f'${v:,.0f}', (monthly_data['month'].iloc[i], v), 
-                       textcoords="offset points", xytext=(0,10), ha='center', fontsize=9)
+        # Format y-axis to show values in thousands/millions
+        ax = plt.gca()
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x/1000:.0f}K' if x < 1000000 else f'${x/1000000:.1f}M'))
         
         plt.tight_layout()
-        return fig
+        plt.show()
     
-    def plot_category_performance(self, top_n: int = 10, 
-                                figsize: Tuple[int, int] = (12, 8)) -> plt.Figure:
+    def plot_category_performance(self, category_data: pd.DataFrame, 
+                                 year: Optional[int] = None) -> None:
         """
-        Create a product category performance visualization.
+        Create horizontal bar chart for category performance.
         
         Args:
-            top_n (int): Number of top categories to show
-            figsize (Tuple[int, int]): Figure size
-        
-        Returns:
-            plt.Figure: Category performance plot
+            category_data (pd.DataFrame): Category performance data
+            year (int, optional): Year being analyzed for title
         """
-        if 'error' in self.report_data['product_performance']:
-            fig, ax = plt.subplots(figsize=figsize)
-            ax.text(0.5, 0.5, 'Product category data not available', 
-                   ha='center', va='center', transform=ax.transAxes, fontsize=14)
-            return fig
+        plt.figure(figsize=(12, 8))
         
-        category_data = self.report_data['product_performance']['top_categories'].head(top_n)
-        year = self.report_data['analysis_period']
+        # Sort by revenue and take top categories
+        top_categories = category_data.head(10)
         
-        fig, ax = plt.subplots(figsize=figsize)
+        bars = plt.barh(range(len(top_categories)), top_categories['total_revenue'], 
+                       color=plt.cm.Set3(range(len(top_categories))))
         
-        bars = ax.barh(category_data['product_category_name'], category_data['total_revenue'],
-                      color=self.color_palette[1])
+        year_text = f" - {year}" if year else ""
+        plt.title(f'Revenue by Product Category{year_text}', fontsize=16, fontweight='bold')
+        plt.xlabel('Total Revenue ($)', fontsize=12)
+        plt.ylabel('Product Category', fontsize=12)
         
-        ax.set_title(f'Top {top_n} Product Categories by Revenue - {year}', 
-                    fontsize=16, fontweight='bold', pad=20)
-        ax.set_xlabel('Revenue ($)', fontsize=12)
-        ax.set_ylabel('Product Category', fontsize=12)
+        # Set category labels
+        plt.yticks(range(len(top_categories)), 
+                  [cat.replace('_', ' ').title() for cat in top_categories['product_category_name']])
         
-        # Format x-axis as currency
-        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
-        
-        # Add data labels
-        for i, v in enumerate(category_data['total_revenue']):
-            ax.text(v, i, f'${v:,.0f}', va='center', ha='left', fontsize=10, 
-                   bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7))
+        # Add value labels on bars
+        for i, bar in enumerate(bars):
+            width = bar.get_width()
+            plt.text(width, bar.get_y() + bar.get_height()/2, 
+                    f'${width/1000:.0f}K', ha='left', va='center', fontweight='bold')
         
         plt.tight_layout()
-        return fig
+        plt.show()
     
-    def plot_geographic_heatmap(self) -> go.Figure:
+    def plot_geographic_choropleth(self, geographic_data: pd.DataFrame, 
+                                  year: Optional[int] = None) -> None:
         """
-        Create a geographic revenue heatmap.
+        Create choropleth map for geographic performance.
         
-        Returns:
-            go.Figure: Plotly choropleth map
+        Args:
+            geographic_data (pd.DataFrame): Geographic performance data
+            year (int, optional): Year being analyzed for title
         """
-        geo_data = self.report_data['geographic_performance']
-        year = self.report_data['analysis_period']
-        
-        if 'error' in geo_data.columns:
-            fig = go.Figure()
-            fig.add_annotation(text="Geographic data not available", 
-                             x=0.5, y=0.5, showarrow=False, font_size=16)
-            return fig
+        year_text = f" - {year}" if year else ""
         
         fig = px.choropleth(
-            geo_data,
-            locations='state',
-            color='revenue',
+            geographic_data,
+            locations='customer_state',
+            color='total_revenue',
             locationmode='USA-states',
             scope='usa',
-            title=f'Revenue by State - {year}',
-            color_continuous_scale='Blues',
-            labels={'revenue': 'Revenue ($)'}
+            title=f'Revenue by State{year_text}',
+            color_continuous_scale='Reds',
+            labels={'total_revenue': 'Total Revenue ($)'}
         )
         
         fig.update_layout(
             title_font_size=16,
-            title_x=0.5,
-            geo=dict(showframe=False, showcoastlines=True)
+            geo=dict(bgcolor='rgba(0,0,0,0)')
         )
         
-        return fig
+        fig.show()
     
-    def plot_review_distribution(self, figsize: Tuple[int, int] = (10, 6)) -> plt.Figure:
+    def plot_review_score_distribution(self, review_data: pd.Series, 
+                                     year: Optional[int] = None) -> None:
         """
-        Create a review score distribution visualization.
+        Create horizontal bar chart for review score distribution.
         
         Args:
-            figsize (Tuple[int, int]): Figure size
-        
-        Returns:
-            plt.Figure: Review distribution plot
+            review_data (pd.Series): Review score distribution data
+            year (int, optional): Year being analyzed for title
         """
-        year = self.report_data['analysis_period']
+        plt.figure(figsize=(10, 6))
         
-        # Get review data from the original sales data (need to pass this in)
-        # For now, create a placeholder
-        fig, ax = plt.subplots(figsize=figsize)
+        # Sort by review score
+        sorted_data = review_data.sort_index()
         
-        satisfaction_metrics = self.report_data['customer_satisfaction']
+        bars = plt.barh(range(len(sorted_data)), sorted_data.values, 
+                       color=plt.cm.RdYlGn(np.linspace(0.2, 1, len(sorted_data))))
         
-        if 'error' in satisfaction_metrics:
-            ax.text(0.5, 0.5, 'Review data not available', 
-                   ha='center', va='center', transform=ax.transAxes, fontsize=14)
-            return fig
+        year_text = f" - {year}" if year else ""
+        plt.title(f'Review Score Distribution{year_text}', fontsize=16, fontweight='bold')
+        plt.xlabel('Proportion of Reviews', fontsize=12)
+        plt.ylabel('Review Score', fontsize=12)
         
-        # Create a summary bar chart of satisfaction metrics
-        metrics = ['Score 5 (%)', 'Score 4+ (%)', 'Score 1-2 (%)']
-        values = [satisfaction_metrics['score_5_percentage'],
-                 satisfaction_metrics['score_4_plus_percentage'],
-                 satisfaction_metrics['score_1_2_percentage']]
-        colors = ['#2ca02c', '#1f77b4', '#d62728']
+        # Set score labels
+        plt.yticks(range(len(sorted_data)), sorted_data.index)
         
-        bars = ax.bar(metrics, values, color=colors)
-        
-        ax.set_title(f'Customer Satisfaction Metrics - {year}', 
-                    fontsize=16, fontweight='bold', pad=20)
-        ax.set_ylabel('Percentage (%)', fontsize=12)
-        
-        # Add data labels
-        for bar, value in zip(bars, values):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
-                   f'{value:.1f}%', ha='center', va='bottom', fontsize=11)
+        # Add percentage labels on bars
+        for i, bar in enumerate(bars):
+            width = bar.get_width()
+            plt.text(width, bar.get_y() + bar.get_height()/2, 
+                    f'{width:.1%}', ha='left', va='center', fontweight='bold')
         
         plt.tight_layout()
-        return fig
+        plt.show()
 
 
-def format_currency(value: float) -> str:
-    """Format a numeric value as currency."""
-    return f"${value:,.2f}"
-
-
-def format_percentage(value: float, decimals: int = 1) -> str:
-    """Format a numeric value as percentage."""
-    return f"{value:.{decimals}f}%"
-
-
-def print_metrics_summary(report: Dict[str, any]) -> None:
+def print_metrics_summary(revenue_metrics: Dict, monthly_growth: pd.Series, 
+                         experience_metrics: Dict, year: int) -> None:
     """
-    Print a formatted summary of business metrics.
+    Print a formatted summary of key business metrics.
     
     Args:
-        report (Dict): Business metrics report
+        revenue_metrics (Dict): Revenue metrics dictionary
+        monthly_growth (pd.Series): Monthly growth data
+        experience_metrics (Dict): Customer experience metrics
+        year (int): Year being analyzed
     """
-    print("=" * 60)
-    print(f"BUSINESS METRICS SUMMARY - {report['analysis_period']}")
-    print("=" * 60)
+    print("="*60)
+    print(f"BUSINESS METRICS SUMMARY - {year}")
+    print("="*60)
+    print()
     
-    # Revenue metrics
-    revenue_metrics = report['revenue_metrics']
-    print(f"\nREVENUE PERFORMANCE:")
-    print(f"  Total Revenue: {format_currency(revenue_metrics['total_revenue'])}")
-    print(f"  Total Orders: {revenue_metrics['total_orders']:,}")
-    print(f"  Average Order Value: {format_currency(revenue_metrics['average_order_value'])}")
+    # Revenue Metrics
+    print("REVENUE PERFORMANCE:")
+    print(f"  Total Revenue: ${revenue_metrics['current_revenue']:,.2f}")
+    print(f"  Total Orders: {revenue_metrics['current_orders']:,}")
+    print(f"  Average Order Value: ${revenue_metrics['current_avg_order_value']:.2f}")
     
-    if 'revenue_growth_rate' in revenue_metrics:
-        print(f"  Revenue Growth: {format_percentage(revenue_metrics['revenue_growth_rate'])}")
-        print(f"  Order Growth: {format_percentage(revenue_metrics['order_growth_rate'])}")
+    if 'revenue_growth_pct' in revenue_metrics:
+        print(f"  Revenue Growth vs {revenue_metrics['comparison_year']}: {revenue_metrics['revenue_growth_pct']:.2f}%")
+        print(f"  Orders Growth vs {revenue_metrics['comparison_year']}: {revenue_metrics['orders_growth_pct']:.2f}%")
+        print(f"  AOV Growth vs {revenue_metrics['comparison_year']}: {revenue_metrics['aov_growth_pct']:.2f}%")
     
-    # Customer satisfaction
-    if 'error' not in report['customer_satisfaction']:
-        satisfaction = report['customer_satisfaction']
-        print(f"\nCUSTOMER SATISFACTION:")
-        print(f"  Average Review Score: {satisfaction['avg_review_score']:.2f}/5.0")
-        print(f"  High Satisfaction (4+): {format_percentage(satisfaction['score_4_plus_percentage'])}")
+    print()
     
-    # Delivery performance
-    if 'error' not in report['delivery_performance']:
-        delivery = report['delivery_performance']
-        print(f"\nDELIVERY PERFORMANCE:")
-        print(f"  Average Delivery Time: {delivery['avg_delivery_days']:.1f} days")
-        print(f"  Fast Delivery (≤3 days): {format_percentage(delivery['fast_delivery_percentage'])}")
+    # Growth Trends
+    print("GROWTH TRENDS:")
+    avg_monthly_growth = monthly_growth.mean()
+    print(f"  Average Monthly Growth: {avg_monthly_growth:.2f}%")
+    best_month = monthly_growth.idxmax()
+    worst_month = monthly_growth.idxmin()
+    print(f"  Best Month: {best_month} ({monthly_growth[best_month]:.2f}%)")
+    print(f"  Worst Month: {worst_month} ({monthly_growth[worst_month]:.2f}%)")
+    print()
     
-    print("=" * 60)
+    # Customer Experience
+    print("CUSTOMER EXPERIENCE:")
+    print(f"  Average Delivery Time: {experience_metrics['avg_delivery_days']:.1f} days")
+    print(f"  Average Review Score: {experience_metrics['avg_review_score']:.2f}/5")
+    
+    # Delivery speed satisfaction
+    if 'avg_review_by_delivery_speed' in experience_metrics:
+        print("  Review Scores by Delivery Speed:")
+        for speed, score in experience_metrics['avg_review_by_delivery_speed'].items():
+            print(f"    {speed}: {score:.2f}/5")
+    
+    print()
+    print("="*60)
